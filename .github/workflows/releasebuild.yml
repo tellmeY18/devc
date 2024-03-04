@@ -9,17 +9,10 @@ jobs:
   tagged-release:
     name: "ReleaseBuild"
     runs-on: "ubuntu-latest"
-    timeout-minutes: ${{ (matrix.language == 'swift' && 120) || 360 }}
     strategy:
-      fail-fast: false
       matrix:
-        language: [ 'go' ]
-    permissions:
-      # required for all workflows
-      security-events: read
-      actions: write
-      contents: write
-    
+        go_version: ['1.16']
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -27,78 +20,17 @@ jobs:
     - name: Setup Go
       uses: actions/setup-go@v2
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: ${{ matrix.go_version }}
     
-    - name: "Build"
+    - name: Install GoReleaser
       run: |
-        bash scripts/build-all-arch.sh
-      working-directory: "."
+        go install github.com/goreleaser/goreleaser@latest
+      env:
+        PATH: ${{ runner.toolsDir }}/go/$${{ matrix.go_version }}/x64/bin:$${PATH}
 
-    - name: "Test"
-      id: "test"
-      # only testing amd64 and 386 builds, as the github machine do not support others
-      run: | 
-        set -e
-        sudo apt-get install -y buildah
-        for exe in devc-v*amd64 devc-v*386 ; do echo -e "\nTesting $exe"; if ! ./$exe --version ; then echo "Error executing : $exe" ; exit 1; fi; done ;
-      working-directory: "."
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+    - name: "Build and Release"
+      run: |
+        goreleaser release
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref_name }}
-        release_name: ${{ github.ref_name }}
-        draft: false
-        prerelease: false
-      if: steps.test.outputs.exit_code == 0
-      
-    - name: Upload Release Asset 386
-      id: upload-release-asset-386 
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
-        asset_path: ./devc-${{ github.ref_name }}-linux-386
-        asset_name: devc-${{ github.ref_name }}-linux-386
-        asset_content_type: binary/octet-stream
 
-    - name: Upload Release Asset amd64
-      id: upload-release-asset-amd64
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
-        asset_path: ./devc-${{ github.ref_name }}-linux-amd64
-        asset_name: devc-${{ github.ref_name }}-amd64
-        asset_content_type: binary/octet-stream
-
-    - name: Upload Release Asset arm
-      id: upload-release-asset-arm
-      uses: actions/upload-release-asset@v1
-      env:
-        GH_TOKEN: ${{ github.token }}
-        GH_REPO: ${{ github.repository }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
-        asset_path: ./devc-${{ github.ref_name }}-linux-arm
-        asset_name: devc-${{ github.ref_name }}-arm
-        asset_content_type: binary/octet-stream
-
-    - name: Upload Release Asset arm64
-      id: upload-release-asset-arm64
-      uses: actions/upload-release-asset@v1
-      env:
-        GH_TOKEN: ${{ github.token }}
-        GH_REPO: ${{ github.repository }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps 
-        asset_path: ./devc-${{ github.ref_name }}-linux-arm64
-        asset_name: devc-${{ github.ref_name }}-arm64
-        asset_content_type: binary/octet-stream
